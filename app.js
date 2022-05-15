@@ -1,6 +1,7 @@
 const express = require("express");
 const ejs = require("ejs");
 const _ = require("lodash");
+const mongoose = require("mongoose");
 
 const app = express();
 
@@ -19,10 +20,47 @@ app.use(express.urlencoded({extended: true}));
 
 app.set('view engine', 'ejs');
 
-let posts = [];
+
+
+mongoose.connect("mongodb://localhost:27017/myblogDB");
+
+const blogPostSchema = {
+  title: {
+    type: String,
+    required: true
+  },
+  _loVersion: String,
+  content: {
+    type: String,
+    required: true
+  }
+}
+
+const Post = mongoose.model("Post", blogPostSchema);
+
+const homePost = new Post( {
+  title: "Home",
+  content: homeStartingContent
+});
+
+const defaultPost = [homePost];
+
 
 app.get("/", function(req, res) {
-  res.render("home",  {homeContent: homeStartingContent, posts: posts});
+
+
+  Post.find({}, function(err, foundPosts) {
+
+    if(foundPosts.length === 0) {    
+      
+        res.render("home",  {homeContent: defaultPost[0].content, posts: []});
+
+    } else {        
+      res.render("home",  {homeContent: defaultPost[0].content, posts: foundPosts});
+    }
+  })
+
+  
 })
 
 app.get("/about", function(req, res) {
@@ -37,31 +75,44 @@ app.get("/compose", function(req, res) {
   res.render("compose");
 })
 
-app.get("/posts/:topic", function (req, res) {
+app.get("/post/:topic", function (req, res) {
+
   const requestedTitle = _.lowerCase(req.params.topic);
 
-  posts.forEach(function(element) {
-    const storedTitle = _.lowerCase(element.title);
+  Post.findOne({_loVersion: requestedTitle}, function(err, resPost) {
+      if(err || !resPost){
+          console.log("Not found");
+      } else {
 
-    if(storedTitle === requestedTitle) {
-      res.render("posts",  {postTitle: element.title, postContent: element.content});
-    }
-  })
+        const storedTitle = _.lowerCase(resPost.title);
 
+        if(storedTitle === requestedTitle) {
+              res.render("post",  {postTitle: resPost.title, postContent: resPost.content});
+        }
+        
+        
+      } //end of else    
+  })  //end of find method
 
 })
 
 app.post("/compose", function(req, res) {
 
-  const post = {
-    title: req.body.postTitle,
-    content: req.body.postBody,
-  };
+    const post_Title = req.body.postTitle;
+    const postContent = req.body.postBody;
+    const post_toLodash = _.lowerCase(post_Title);
 
-  posts.push(post);
-  res.redirect("/");
-})
+    const post = new Post({
+      title: post_Title,
+      _loVersion: post_toLodash,
+      content: postContent
+    });
+
+    post.save();
+    res.redirect("/");
+});
+
 
 app.listen(port, function() {
   console.log(`Server is listening to port ${port} `);
-})
+});
